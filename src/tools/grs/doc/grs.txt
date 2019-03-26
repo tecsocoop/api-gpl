@@ -1,0 +1,598 @@
+Generador de Reportes Siat (GRS)
+====
+La idea es que se pueda construir reportes en siat enteramente
+en javascript y sql ejecutados por ADP.
+
+Con soporte a hacer las páginas de input de parámetro del reportes,
+proceso, y salida opcional a CSV, HTML, PDF.
+
+Todo ejecutado por ADP con un esquema similar a los reportes actuales:
+Es decir ejecución desatendida de un tipo de reporte por usuario.
+
+El generador de reportes esta divido en las siguientes partes
+
+- Database API: 
+	- Permite interactuar con la base de datos, permite
+  	ejecutar SQL, y recorrer los datos ya sea en listas o row por row
+  	con algo similar a un cursor.
+
+- Page API: 
+	- Permite construir paginas de entrada de parámetros de los
+	reportes. Soporta definir inputs tipo textuales, de fechas, y números.
+	- También soporta combo list.
+	- Soporta checkbox, radio button
+	- Soportar crear secciones scrollables. [1]
+	- Permite introducir validaciones previas a disparar la ejecución.
+
+- Output API: 
+	- Permite generar archivos de salida para los reportes.
+	La salida soportadas son: CSV, HTML, PDF.
+	-Permite generar más de un archivo de salida por reporte.
+	- Soporta formatear valores de fechas, y números.	
+
+- SiatUtil API: 
+	- Permite invocar Componentes de SIAT desde el reporte.
+	- Permite generar log para tracear el comportamiento del proceso. 
+	- Permite cambiar el estado de una corrida, y reflejar el estado del proceso.
+
+- Editor:
+	- Permite modificar los archivos de reporte desde una página en el SIAT.
+	Se ingresa por una opción de menu, se elige el reporte, y permite modificar
+	el código del reporte desde el browser.
+
+- Planificador temporal:
+	- Es un agregado en ADP para permite ejecutar procesos a determinadas horas 
+	periódicamente. Los procesos podrán ser Clases Worker en java o archivos 
+	process.js definidos en Javascript que pueden usar las GRS API.
+
+- Selección Almacenadas:
+	- Es una parte del SIAT que representan conjuntos de entidades de SIAT (cuentas, 
+	contribuyentes, deuda, convenios, etc) generadas a partir de parámetros de filtro
+	ingresados por el usuario. Se tienen que hacer modificaciones para poder ser usadas
+	desde GRS.
+
+- Backend:
+	- GRS para su funcionamiento va a utilizar ADP, la estructura de SIAT, librerías
+	externas para la generación de PDF, e interacción con HTTP. Esta parte de GRS 
+	representa el código necesario para que todas las partes interactúen correctamente.  
+
+
+Caso de ejemplo
+----
+El generador tiene que soportar la construccion de reporte con parametros similar a:
+Estrategia Fiscal -> Investigacion -> Mantenedor de Op. Control ->
+  Contribuyentes -> Busqueda Masiva -> Agregar
+
+
+Tiempos estimados 
+====
+
+    Database API                    1.0 dia
+    Page API                        2.0 dias
+    Output API                      3.0 dias
+    Util API                        1.0 dias
+    Editor                          2.0 dias
+    Planificador Temporal           2.0 dias
+    Seleccion Almacenada            1.0 dias
+    Backend                         3.0 dias
+
+
+
+Database API
+----
+Api para poder ejecutar querys.
+Permite SQL con parametros tipo string, integer, double, date. Los resultados se pueden
+por row, por listas o con un iteraror.
+
+class Sql
+	/* Ejecuta un 'sql', acepta multiples parametros. Los parametros en 'sql' se indican
+	   con ?. 
+           Retorna una mapa donde la clave es el nombre de la columna y el valor es un objeto javascrit.
+	   Pej: 
+		row = Sql.row('select * from pad_cuenta where id = ? and idrecurso = ?', 12, 14);
+	*/
+	Map<String, Object> row(sql, ...);
+	Map<String, Object> list(sql, ...);
+	Iterator<Map<String, Object>>  cursor(sql, ...);
+	Object value(sql, ...);
+	int exec(sql, ...);
+
+
+
+Construcción de Reportes
+-----
+Se refiere a lo necesario para poder ejecutar reportes vÃ­a ADP.
+Sin nada extra, (aunque se puede construir algo), el ciclo de
+construcciÃ³n seria:
+
+- Se crea un Proceso ADP. Con el tipo: GRS / Generador de Reportes Siat
+- Se crea una carpeta en el Shared Filesystem
+- Se crea input.js, process.js (con vi o notepad)
+- Se copian a la nueva carpeta
+
+- Se prueba vÃ­a browser ingresando a una url especial ej:
+  http://siattest:9060/siat/reportes/ReporteEmision/input
+  o
+  http://siattest:9060/siat/reportes/ReporteEmision/process?idemision=12
+
+- Se despliega en producciÃ³n copiando al Shared Filesystem
+  de producciÃ³n.
+
+
+Ejemplo
+----
+	input.js
+	include("grs.js");	
+	include("const.js");	
+	    //Const.RecursoIdTgi = 14;
+
+	/* debe implementar get(), accept(), render()
+	  
+	  get(): se llama cuando se recibe el request via http.
+	  de una url tipo: http://host/siat/reportes/Ejemplo/get?...
+	  el backend, luego de get() debe llamar a render()
+	  Poner aqui codigo de inicializacion y/o refresco que obtiene datos
+	  para poder mostrar en la pagina cuand se llama a render() 
+	*/	
+	function get() {
+		params = Page.params;
+		
+		/* Aqui codigo de inicializacion,refresh de la pagina de input.*/
+		if (params.idRecurso == null)
+			params.idRecurso = Const.RecursoIdTgi; //ej: para que arranque el combo en tgi
+		
+		if (params.fechaVencimientoDesde == null)
+			params.fechaVencimientoDesde = new Date(); //ej: para que arranque en fecha de hoy
+	
+		if (params.zonas == null) {
+			params.zonas = [1];
+		}
+	}
+
+	function validar() {
+		if (params.idrecurso==null) {
+			page.message("Recurso Requerido");
+			return false;
+		}	
+	}
+
+	/* llamado cuando apreta el boton de aceptar.
+	   
+	*/
+	function accept() {
+		if (!validar()) 
+			return false;
+
+		params.masProps = 15;
+		params.otra = "Que Prop";
+		Adp.schedule(page.process, params, new Date());				
+	}
+	
+	function render() {
+		Page.title("Rerporte de Ejemplo"); //-> String (<title>Reporte...</title>)		
+		Page.fieldset("Parametros");  //->fieldset
+
+		Page.input({ //-> label + input / select+option
+			label: "Recurso:",
+			name: "idRecurso",
+			type: "Select"
+			value: params.idRecurso,
+			onchange: "get"
+			options: recursos(), //array de object[id, label]
+			span:2
+			});
+
+		page.input({
+			label: "Nombre:",
+			name: "nombre",
+			type: "String",
+			value: params.nombre
+			});		
+
+		page.input({
+			label: "Fecha Desde:",
+			name: "fechaDesde",
+			type: "Date",
+			value: params.fechaDesde
+			});
+
+		page.input({
+			label: "Saldo Desde:",
+			name: "saldoDesde",
+			type: "Number",
+			value: params.saldoDesde
+			});
+
+		//checkbox true/false
+		page.input({
+			label: "Solo Principales?:",
+			name: "soloPrincipal",
+			type: "Checkbox",
+			options: [{label"Si/No", value="1"}],
+			checked: params.soloPrincipal
+			});
+
+		//checkbox multi
+		page.input({
+			label: "Zonas",
+			name: "zonas",
+			type: "Checkbox",
+			checked: params.zonas,
+			options: [
+				{label:"Zona 1", value:"1"}, 
+				{label:"Zona 2", value:"2"}]
+			});
+
+		//radio
+		page.input({
+			label: "Radio",
+			name: "radio",
+			type: "Checkbox",
+			checked: params.radio,
+			options: [
+				{label:"Radio 1", value:"1"}, 
+				{label:"Radio 2", value:"2"}]
+			});
+
+
+		page.endFielset();
+
+	}
+
+	function recursos() {
+		return Sql.list("select id value, desRecurso label from def_recurso where estado = 1");
+	}
+
+
+
+//diseño java
+interfaz PageTag
+   contructor(PageContext, Map<String, Object>);
+   tag
+   content
+   end
+   all(); //tag() + content() + end()
+
+PageConst
+PageTitle(PageContext, Map<>) : PageTag
+PageFieldset(PageContext, Map<>) : PageTag
+PageInputSelect(PageContext, Map<>) : PageTag
+PageInputString(PageContext, Map<>) : PageTag
+PageInputDate(PageContext, Map<>) : PageTag
+PageInputNumber(PageContext, Map<>) : PageTag
+PageInputCheckbox(PageContext, Map<>) : PageTag
+PageInputRadio(PageContext, Map<>) : PageTag
+
+
+Page:
+constructor(PageContext)
+//js: page.title({label: "Rerporte de Ejemplo"});
+Page.title(Map<String, Object> map):
+    ctx.write(new PageTitle(ctx, map).all());
+
+//js: page.fieldset({label: "Parametros"});
+Page.filedset(Map<String, Object> map):
+    ctx.write(new PageFieldset(ctx, map).tag());-> // <filedset>
+
+//js: page.input({...});
+    ctx.write(ctx, mkInput(map).all());-> //
+
+//js: page.endFielset()
+    ctx.write(new PageFieldset(ctx, map).end());-> // </filedset>
+
+
+
+process.js
+//reglas de estilo:
+- Las variables y denfiniciones globales ponerlas al principio del programa. 
+- Las variables que se suponen 'Constantes', ponerlas en camel case con mayuscula inicial
+- Las variables, ponerlas en camel case con minuscula inicial.
+- Las funciones camel case con minuscula incial.
+- Usar el prefijo 'process' para funciones que recorren cursores 
+  de gran longitud, y/o que gobiernan el proceso.
+- Usar el prefijo 'make' para funciones crean Objectos (pej, rows que seran insertando).
+- Usar el prefijo 'insert/update' para metodos que insertan o actualizan datos a apartir de objectos.
+- Usar el prefijo 'get' para funciones que retornan Objectos. (pej rows que ya existen en la DB). 
+- Usar caracter tab para indentar
+- Comentarios:
+
+package("grs.js");
+package("Const.js");
+
+Math.sum = function () {
+    var sum = 0;
+    for (var i = 0, j = arguments.length; i < j; i++) {
+        sum += arguments[i];
+    }
+    return sum;
+}
+
+//const
+var SqlCuentas = "select * from pad_cuenta where fechaalta < #d and fechabaja > #d"; //revisar criterio
+var SqlCuentaTieneDeudaAdm = "select count(*) n from gde_deudaadmin where idcuenta = #i and saldo > #f";
+
+// proceesCuentas procesa cada cuenta activa y calcula sus atributos.
+// Calcula los atributos de cuenta y los inserta en las tabla de atributos.
+// Para ver los atributos de 
+// El parametro 'fechaAnalisis' se utiliza para determinar la caducidad 
+// de cuentas y valores de actualización de deuda.
+function processCuentas(fechaAnalisis) {
+	var row;
+	var cuentas = Sql.cursor(SqlCuentas, fechaAnalisis, fechaAnalisis);
+	
+	while (cuenta = cuentas.read()) {
+		var atrs = makeAtrCuenta(cuenta, fechaAnalisis);
+		insertAtrCuenta(cuenta, atrs);
+		//insertAtrObjImp(cuenta, atrs);
+	}
+	cuentas.close();
+}
+
+
+// makeAtrCuenta retorna un objeto con los atributos de la cuenta calculados.
+// Los atributos calculados por 'cuenta' son: 
+//   tieneDeudaAdm: String "SI"/"NO" indica si tiene Deuda Administrativa  
+//   tieneDeudaJud: String "SI"/"NO" indica si tiene Deuda Administrativa
+//   ultFechaPago: Date ultima fecha de pago de las deudas (adm y jud).
+//   montoTotDeudaHist: Number monto total (adm y jud) de saldo 
+//   montoTotDeudaAct: Number monto total (adm y jud) de saldo actualizado a 'fechaAnalisis'
+//   promMensualEmiDec: Number promedio mensual de emitido o declarado segun recurso
+ProcesoAtrCuenta.makeAtrCuenta = function (cuenta, fechaAnalisis) {
+	var ret = new Object();
+	
+	ret.tieneDeudaAdm = Sql.value(SqlCuentaTieneDeudaAdm, cuenta.id) > 0 ? "SI": "NO";
+	ret.tieneDeudaJud = Sql.value(SqlCuentaTieneDeudaJud, cuenta.id) > 0 ? "SI": "NO";
+
+	ret.ultFechaPago = Math.max(
+		Sql.value(SqlCuentaUltFechaPago, "gde_deudaadmin", cuenta.id),
+		Sql.value(SqlCuentaUltFechaPago, "gde_deudajudicial", cuenta.id));
+
+	ret.montoTotDeudaHist = Math.sum(
+		Sql.value(SqlCuentaMontoTotDeudaHist, "gde_deudaadmin", cuenta.id),
+		Sql.value(SqlCuentaMontoTotDeudaHist, "gde_deudajudicial", cuenta.id));
+	
+	ret.montoTotDeudaAct = montoTotDeudaAct(cuenta.id, fechaAnalisis);
+	
+	//calc promMensualEmiDec
+	switch (cuenta.idrecurso) {
+		case Siat.RecursoIdDrei: //Drei
+		case Siat.RecursoIdEtur: //Etur
+			ret.promMensualEmiDec = promMensualDecla(cuenta.id, cuenta.idrecurso, fechaAnalisis);
+			break;
+		case Const.RecursoIdDerPub: //Derecho Publicitario
+			ret.promMensualEmiDec = promMensualDerPub(cuenta.id, fechaAnalisis);
+			break;
+		default: //emision determinada
+			ret.promMensualEmiDec = promMensualDeter(cuenta.id, fechaAnalisis);
+			break;
+	}
+	
+	return ret;
+}
+
+// montoTotDeudaAct calcula el atributo montoTotDeudaAct. 
+// Es la suma de los saldos actualizados de las deudas adm y jud
+// para 'idCuenta' a la 'fechaAnalisis'.
+function montoTotDeudaAct(idCuenta, fechaAnalisis) {
+	var deudas = []; // lista de Deudas a actualizar y sumar
+	var totact = 0;
+	var ActulizarDeuda = Grs.import("ar.gov.rosario.siat.........Actulizar");
+
+	deudas = deudas.concat(
+		Sql.list(SqlSaldosDeuda, "gde_deudaadmin", idCuenta),
+		Sql.list(SqlSaldosDeuda, "gde_deudajudicial", idCuenta));
+
+	for(var i=0; i<deudas.length; i++) {
+		totact += ActulizaDeuda.actualizar(deuda.saldo, deuda.fechaVencimiento, fechaAnalisis).getImporte(); 
+	}
+	return totact;
+}
+
+//
+function promMensualDecla(idCuenta, idRecurso, fechaAnalisis) {
+}
+
+function promMensualDerPub(idCuenta, fechaAnalisis) {
+}
+
+function promMensualDeter(idCuenta, fechaAnalisis);	
+}
+
+
+
+
+function x() {
+	select * from tmpcuentas;
+	[nro, cuit, titular, anio, periodo, impdecla, imppago, totalpago]
+
+
+
+	nro, cuit, titular, impdecla (anio/periodo), imppago(anio/periodo), impdecla (anio/periodo+1), imppago(anio/periodo+1) 
+}
+
+
+
+
+
+// process.js
+function process() {
+	var params = Adp.current().params;
+	var SqlQuery1 = "select * from tabla_zarpada order by xx";
+	
+	hacerTablaTemporalSarpada();
+	
+	var cursor = Sql.cursor(SqlQuery);
+
+
+	while (cuenta = cursor.read()) {
+		//out reporte	
+	}
+}
+
+
+
+
+
+var recurso = Sql.get("gde_recurso", params.idRecurso);
+
+section("Parametros")
+field("Recurso", ["%id - %desRecurso", recurso]);
+field("Numero Cuenta:", [params.numeroCuenta]);
+endsection()
+
+attr({"class": "misection"});
+format(["%id$d"]);
+
+
+//filename con: NombreProceso-[Prefix-]fecha-idcorrida.Sufix
+var filename = Adp.makeFileName("Sufix", "Prefix[opt]");  
+Adp.addFile(filename, "descripcion corto", "observacion");
+
+
+var myfmt = Grs.Fmt({
+	props : {
+		"numerocuenta" : "r%s",  //10001208
+		"nomtitpri"    : "c%s",  //Juan Perez
+		"desdomenv"    : "c%s",  //Pte. Roca 120
+		"totdeuda"     : "r%5f", //     1234.345
+	},	
+	types :	{
+		"Decimal" : "r%2f",
+		"Integer" : "r%d",
+		"Date"    : "l%s", //???
+		"String"  : "l%s",
+	}} 
+
+
+var cursor = Sql.cursor("select * from pad_cuenta");
+
+var out = Grs.Out(filename, {});
+var table = out.table();
+
+out.write("<div>Hola Html</html>");
+table.order = 	order :["numerocuenta", "nomtitpri", "desdomenv", "totdeuda"];
+table.fmt = myfmt;
+
+table.attrs({class="miclase", width:"100%"});  //guarda en attrs este mapa
+table.table() 
+  table.caption("Reporte de Cuentas");  
+  table.thead(["l:Nro. Cuenta", "r:Llamada", "...", "..."]); 
+
+  table.tbody();
+
+while(var row = cursor.next()) {
+	table.brow(fmt, row) //llama a tr, muchos td, endtr
+}
+
+  table.endtbody();
+  table.endtable();
+
+
+
+
+	table.tr();
+		table.td(fmt.format(row, "totdeuda"));
+		table.td(row.totdeuda, "%3f");
+		table.td(row.totdeuda, "%3f");
+		table.td(row.totdeuda, "%3f");
+
+
+
+
+
+
+  table.thead(); 
+    table.tr();
+      table.th("Numero Cuenta");
+      table.th("Titular");
+      table.th("Dom. Envio");
+      table.th("Total Deuda");
+    table.endtr();  
+  table.endthead();
+
+}
+
+
+
+java:
+Out
+   table()
+   filedset();
+
+OutFormatter()
+   constructor(Map<>)
+   fmt(Object obj, String propname); -> "Valor formateado"
+   efmt(Object obj, String propname); -> ["Valor formateado", "left|right|center"]
+
+OutTable()
+
+OutFieldset()
+
+
+CsvFile
+	constructor(Writer);
+	separator; //;
+	write(String);
+	endl();
+
+
+HtmlFile
+	
+
+
+
+
+
+htmlToPdf(File html, File out)
+   //flying source
+   http://code.google.com/p/flying-saucer/
+
+   
+
+
+fieldset
+  
+
+
+table
+  caption
+  
+  thead
+    tr
+      th
+
+  tbody
+    tr
+      td
+      
+  tfoot
+    tr
+      td
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+out = Grs.outCsv("/tmp/x");
+out.fmt = {}
+out.order = {};
+
+
+
+
+
+
+
+
+      
+      
+      

@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<classpath>
+	<classpathentry kind="src" path="adpcore/src"/>
+	<classpathentry kind="src" path="swe/buss/src"/>
+	<classpathentry kind="src" path="swe/view/src/WEB-INF/src"/>
+	<classpathentry kind="src" path="swe/iface/src"/>
+	<classpathentry kind="src" path="tools/grs/src"/>
+	<classpathentry kind="src" path="tools/alone/src"/>
+	<classpathentry kind="src" path="demoda/src"/>
+	<classpathentry kind="src" path="iface/src"/>
+	<classpathentry kind="src" path="buss/src"/>
+	<classpathentry kind="src" path="buss/test"/>
+	<classpathentry kind="src" path="view/src/WEB-INF/src"/>
+	<classpathentry kind="src" path="adpsiat/src/WEB-INF/src"/>
+	<classpathentry kind="con" path="org.eclipse.jdt.launching.JRE_CONTAINER"/>
+	<classpathentry kind="lib" path="externalJars/lib/commons-logging-1.1.1.jar"/>
+	<classpathentry kind="lib" path="externalJars/lib/ejb3-persistence.jar"/>
+	<classpathentry kind="lib" path="externalJars/lib/fop.jar"/>
+	<classpathentry kind="lib" path="externalJars/lib/grs.jar"/>
+	<classpathentry kind="lib" path="externalJars/lib/hibernate3.jar"/>
+	<classpathentry kind="lib" path="externalJars/lib/jdbm-1.0.jar"/>
+	<classpathentry kind="lib" path="externalJars/lib/js.jar"/>
+	<classpathentry kind="lib" path="externalJars/lib/log4j-1.2.13.jar"/>
+	<classpathentry kind="lib" path="externalJars/lib/mail-1.4.jar"/>
+	<classpathentry kind="lib" path="externalJars/lib/servlet-api.jar"/>
+	<classpathentry kind="lib" path="externalJars/lib/struts.jar"/>
+	<classpathentry kind="lib" path="externalJars/lib/swebuss.jar"/>
+	<classpathentry kind="lib" path="externalJars/lib/sweiface.jar"/>
+	<classpathentry kind="lib" path="externalJars/lib/hibernate-annotations.jar"/>
+	<classpathentry kind="lib" path="externalJars/lib/iText-2.1.6.jar"/>
+	<classpathentry kind="output" path="build/classes"/>
+</classpath>
